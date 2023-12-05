@@ -55,16 +55,15 @@ int main(int argc, char *argv[])
     if (connect(socketFD, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) // Connect socket to addy
         error("CLIENT: ERROR connecting");
     
-    // Get input message from user
-    // printf("CLIENT: Enter text to send to the server, and then hit enter: ");
-    // memset(buffer, '\0', sizeof(buffer)); // Clear out the buffer array
-    // fgets(buffer, sizeof(buffer) - 1, stdin); // Get input from the user, trunc to buffer - 1 chars, leaving \0
-    // buffer[strcspn(buffer, "\n")] = '\0'; // Remove the trailing \n that fgets adds
-    
     // Send message to server
     charsWritten = send(socketFD, msg, strlen(msg), 0); // Write to the server
     if (charsWritten < 0) error("CLIENT: ERROR writing to socket");
     if (charsWritten < strlen(msg)) printf("CLIENT: WARNING: Not all data written to socket!\n");
+
+    // send key to server
+    charsWritten = send(socketFD, key, strlen(key), 0);
+    if (charsWritten < 0) error("CLIENT: ERROR writing to socket");
+    if (charsWritten < strlen(key)) printf("CLIENT: WARNING: Not all data written to socket!\n");
     
     exit(0);
 

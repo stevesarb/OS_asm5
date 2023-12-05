@@ -9,11 +9,13 @@
 void error(const char *msg) { perror(msg); exit(1); } // Error function used for reporting issues
 void push_back(pid_t*, pid_t);
 pid_t* check_children(pid_t*);
+char* get_data(int);
+char* get_data1(int);
+char* append_data(char* wholeMSG, char buffer[]);
 
 int main(int argc, char *argv[]) {
     int listenSocketFD, establishedConnectionFD, portNumber, charsRead;
     socklen_t sizeOfClientInfo;
-    char buffer[256];
     struct sockaddr_in serverAddress, clientAddress;
     
     if (argc < 2) { fprintf(stderr,"USAGE: %s port\n", argv[0]); exit(1); } // Check usage & args
@@ -34,8 +36,9 @@ int main(int argc, char *argv[]) {
         error("ERROR on binding");
     listen(listenSocketFD, 5); // Flip the socket on - it can now receive up to 5 connections
 
-    char* wholeMSG = NULL;
-    char* temp = NULL;
+    char* data = NULL;
+    char* msg = NULL;
+    char* key = NULL;
     pid_t spawnpid = -5;
     pid_t* pid_arr = calloc(5, sizeof(pid_t));
     while (1) {
@@ -54,44 +57,20 @@ int main(int argc, char *argv[]) {
 
         // child
         else if (spawnpid == 0) {
-            // Get the message from the client and display it
-            do {
-                memset(buffer, '\0', 256);
-                charsRead = recv(establishedConnectionFD, buffer, 255, 0); // Read the client's message from the socket
-                if (charsRead < 0) error("ERROR reading from socket");
-
-                printf("RECEIVED DATA!\n");
-
-                if (wholeMSG != NULL) {
-                    printf("WHOLEMSG != NULL\n");
-                    temp = calloc(strlen(wholeMSG) + strlen(buffer) + 1, sizeof(char));
-                    memset(temp, '\0', strlen(wholeMSG) + strlen(buffer) + 1);
-                    strcat(temp, wholeMSG);
-                    printf("ABOUT TO FREE!\n");
-                    free(wholeMSG);
-                }
-                else {
-                    printf("WHOLEMSG == NULL\n");
-                    temp = calloc(strlen(buffer) + 1, sizeof(char));
-                    memset(temp, '\0', strlen(buffer) + 1);
-                }
-
-                printf("ABOUT TO STRCAT(temp, buffer)!\n");
-                strcat(temp, buffer);
-                wholeMSG = temp;
-                temp = NULL;
-
-                printf("LOOPING BACK AROUND!\n");
-
-            } while (strstr(wholeMSG, "#") == NULL);
-
-            wholeMSG[strlen(wholeMSG) - 1] = '\0';
-            printf("SERVER: I received this from the client: \"%s\"\n", wholeMSG);
+            // Get the message from the client
+            data = get_data1(establishedConnectionFD);
+            key = strstr(data, "#") + 1;
+            *(key - 1) = '\0'; // replace # that separates message and key with null terminator
+            msg = data;
+            /* NOTE: msg and key are just pointers that point to the same block of memory, just different segments of it */
+            
+            printf("SERVER: msg received from client: \"%s\"\n", msg);
+            printf("SERVER: key received from client: \"%s\"\n", key);
             // FILE* f = fopen("output.txt", "w");
             // fprintf(f, "%s", wholeMSG);
             // fclose(f);
 
-            exit(0);
+            close(establishedConnectionFD); exit(0);
 
             // Send a Success message back to the client
             charsRead = send(establishedConnectionFD, "I am the server, and I got your message", 39, 0); // Send success back 
@@ -137,4 +116,59 @@ pid_t* check_children(pid_t* pid_arr) {
     free(pid_arr);
 
     return new_arr;
+}
+
+char* get_data1(int establishedConnectionFD) {
+    char* data = NULL;
+    char* hashtag = NULL;
+    char buffer[256];
+    int charsRead;
+    
+    while (1) {
+        // read next 255 characters of message
+        memset(buffer, '\0', 256);
+        charsRead = recv(establishedConnectionFD, buffer, 255, 0); // Read the client's message from the socket
+        if (charsRead < 0) error("ERROR reading from socket");
+        
+        // add buffer to data
+        data = append_data(data, buffer);
+
+        // check for transmission end signal (2 lone '#' symbols: 
+        // one at the end of the message, one at the end of the key)
+        hashtag = strstr(data, "#");
+        if (hashtag != NULL) {
+            // first # found, search for the second one
+            if (strstr(hashtag + 1, "#") != NULL) // begin searching one char to the right of the first #
+                break;
+        }
+    }
+
+    data[strlen(data) - 1] = '\0'; // replace trailing # with null terminator
+
+    // data is a string containing both the msg and key, seperated by a # symbol
+    return data; 
+}
+
+char* append_data(char* wholeMSG, char buffer[]) {
+    char* temp = NULL;
+    if (wholeMSG != NULL) {
+        // printf("WHOLEMSG != NULL\n");
+        temp = calloc(strlen(wholeMSG) + strlen(buffer) + 1, sizeof(char));
+        memset(temp, '\0', strlen(wholeMSG) + strlen(buffer) + 1);
+        strcat(temp, wholeMSG);
+        // printf("ABOUT TO FREE!\n");
+        free(wholeMSG);
+    }
+    else {
+        // printf("WHOLEMSG == NULL\n");
+        temp = calloc(strlen(buffer) + 1, sizeof(char));
+        memset(temp, '\0', strlen(buffer) + 1);
+    }
+
+    // printf("ABOUT TO STRCAT(temp, buffer)!\n");
+    strcat(temp, buffer);
+    wholeMSG = temp;
+    temp = NULL;
+
+    return wholeMSG;
 }
