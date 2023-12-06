@@ -2,10 +2,10 @@
 
 void error(const char *msg) { perror(msg); exit(1); } // Error function used for reporting issues
 void push_back(pid_t*, pid_t);
-pid_t* check_children(pid_t*);
+pid_t* check_children(pid_t*, int*);
 char* get_data(int);
-// char* append_data(char* wholeMSG, char buffer[]);
 char* encrypt_msg(char*, char*);
+void check_client(int);
 
 int main(int argc, char *argv[]) {
     int listenSocketFD, establishedConnectionFD, portNumber, charsRead;
@@ -34,17 +34,25 @@ int main(int argc, char *argv[]) {
     char* msg = NULL;
     char* key = NULL;
     char* cipherText = NULL;
+    int num_children = 0;
     pid_t spawnpid = -5;
     pid_t* pid_arr = calloc(5, sizeof(pid_t));
     while (1) {
-        // check on child processes
-        pid_arr = check_children(pid_arr);
+        // if number of children is 5, check to see if any children have exited before accepting another connection
+        while (num_children == 5) {
+            pid_arr = check_children(pid_arr, &num_children);
+
+            // if no children have finished, sleep for 10ms so the child processes have time to finish
+            if (num_children == 5) 
+                sleep(0.01);
+        }
 
         // Accept a connection, blocking if one is not available until one connects
         sizeOfClientInfo = sizeof(clientAddress); // Get the size of the address for the client that will connect
         establishedConnectionFD = accept(listenSocketFD, (struct sockaddr *)&clientAddress, &sizeOfClientInfo); // Accept 
+        num_children++; // increment number of children
         if (establishedConnectionFD < 0) error("ERROR on accept");
-        printf("SERVER: Connected Client at port %d\n", ntohs(clientAddress.sin_port));
+        // printf("SERVER: Connected Client at port %d\n", ntohs(clientAddress.sin_port));
 
         // FORK HAPPENS HERE
         spawnpid = fork();
@@ -52,6 +60,9 @@ int main(int argc, char *argv[]) {
 
         // child
         else if (spawnpid == 0) {
+            // check that the connection is with an encryption client
+            check_client(establishedConnectionFD);
+
             // Get the message from the client
             data = get_data(establishedConnectionFD);
             key = strstr(data, "#") + 1;
@@ -59,8 +70,8 @@ int main(int argc, char *argv[]) {
             msg = data;
             /* NOTE: msg and key are just pointers that point to the same block of memory, just different segments of it */
             
-            printf("SERVER: msg received from client: \"%s\"\n", msg);
-            printf("SERVER: key received from client: \"%s\"\n", key);
+            // printf("SERVER: msg received from client: \"%s\"\n", msg);
+            // printf("SERVER: key received from client: \"%s\"\n", key);
             
             // encrypt message using provided key
             cipherText = encrypt_msg(msg, key);
@@ -93,7 +104,7 @@ void push_back(pid_t* pid_arr, pid_t pid) {
     }
 }
 
-pid_t* check_children(pid_t* pid_arr) {
+pid_t* check_children(pid_t* pid_arr, int* num_children) {
     pid_t termChild = -5;
     int childExitMethod = -5;
     int i = 0;
@@ -105,6 +116,8 @@ pid_t* check_children(pid_t* pid_arr) {
         // if child has not terminated
         if (termChild == 0) 
             push_back(new_arr, pid_arr[i]);
+        else 
+            (*num_children)--;
         
         ++i;
     }
@@ -140,33 +153,11 @@ char* get_data(int establishedConnectionFD) {
 
     data[strlen(data) - 1] = '\0'; // replace trailing # with null terminator
 
+    printf("SERVER, data: %s\n", data);
+
     // data is a string containing both the msg and key, seperated by a # symbol
     return data; 
 }
-
-// char* append_data(char* wholeMSG, char buffer[]) {
-//     char* temp = NULL;
-//     if (wholeMSG != NULL) {
-//         // printf("WHOLEMSG != NULL\n");
-//         temp = calloc(strlen(wholeMSG) + strlen(buffer) + 1, sizeof(char));
-//         memset(temp, '\0', strlen(wholeMSG) + strlen(buffer) + 1);
-//         strcat(temp, wholeMSG);
-//         // printf("ABOUT TO FREE!\n");
-//         free(wholeMSG);
-//     }
-//     else {
-//         // printf("WHOLEMSG == NULL\n");
-//         temp = calloc(strlen(buffer) + 1, sizeof(char));
-//         memset(temp, '\0', strlen(buffer) + 1);
-//     }
-
-//     // printf("ABOUT TO STRCAT(temp, buffer)!\n");
-//     strcat(temp, buffer);
-//     wholeMSG = temp;
-//     temp = NULL;
-
-//     return wholeMSG;
-// }
 
 char* encrypt_msg(char* msg, char* key) {
     if (strlen(key) < strlen(msg)) error("SERVER: key is too short!\n");
@@ -199,4 +190,27 @@ char* encrypt_msg(char* msg, char* key) {
     cipherText[i] = '!'; // add control code to end of string
 
     return cipherText;
+}
+
+void check_client(int establishedConnectionFD) {
+    int charsRead;
+    char buffer[10];
+    memset(buffer, '\0', 10);
+
+    // send 'e' for encryption server
+    charsRead = send(establishedConnectionFD, "e", 1, 0); 
+    if (charsRead < 0) error("SERVER: ERROR writing to socket");
+
+    // get reponse from client
+    charsRead = recv(establishedConnectionFD, buffer, 9, 0);
+    if (charsRead < 0) error("ERROR reading from socket");
+
+    printf("SERVER check_client: %s\n", buffer);
+
+    // if connection is with encryption client, client will send back 'e'
+    // if connection is not with an encryption client, close the socket and exit the child process
+    if (buffer[0] != 'e') {
+        close(establishedConnectionFD);
+        exit(0);
+    }
 }

@@ -5,6 +5,7 @@
 void error(const char *msg) { perror(msg); exit(0); } // Error function used for reporting issues
 int check_file(FILE*, char**);
 char* get_data(int);
+void check_server(int);
 
 int main(int argc, char *argv[])
 {
@@ -50,25 +51,24 @@ int main(int argc, char *argv[])
     // Connect to server
     if (connect(socketFD, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) // Connect socket to addy
         error("CLIENT: ERROR connecting");
+
+    
+    // check that the client is connected to the encryption server
+    check_server(socketFD);
     
     // Send message to server
     charsWritten = send(socketFD, msg, strlen(msg), 0); // Write to the server
     if (charsWritten < 0) error("CLIENT: ERROR writing to socket");
-    if (charsWritten < strlen(msg)) printf("CLIENT: WARNING: Not all data written to socket!\n");
+    if (charsWritten < strlen(msg)) perror("CLIENT: WARNING: Not all data written to socket!\n");
 
     // send key to server
     charsWritten = send(socketFD, key, strlen(key), 0);
     if (charsWritten < 0) error("CLIENT: ERROR writing to socket");
-    if (charsWritten < strlen(key)) printf("CLIENT: WARNING: Not all data written to socket!\n");
+    if (charsWritten < strlen(key)) perror("CLIENT: WARNING: Not all data written to socket!\n");
     
-    
-
     // Get return message from server
     cipherText = get_data(socketFD);
-    // memset(buffer, '\0', sizeof(buffer)); // Clear out the buffer again for reuse
-    // charsRead = recv(socketFD, buffer, sizeof(buffer) - 1, 0); // Read data from the socket, leaving \0 at end
-    // if (charsRead < 0) error("CLIENT: ERROR reading from socket");
-    printf("CLIENT: I received this from the server: \"%s\"\n", cipherText);
+    printf("%s\n", cipherText);
     
     close(socketFD); // Close the socket
     return 0;
@@ -126,5 +126,34 @@ char* get_data(int socketFD) {
 
     data[strlen(data) - 1] = '\0'; // replace CC with terminator
 
+    printf("CLIENT, data: %s\n", data);
+
     return data;
+}
+
+void check_server(int socketFD) {
+    int charsRead;
+    char buffer[10];
+    memset(buffer, '\0', 10);
+
+    // get code from server
+    charsRead = recv(socketFD, buffer, 9, 0);
+    if (charsRead < 0) error("ERROR reading from socket");
+
+    printf("CLIENT check_server: %s\n", buffer);
+
+    // check that the connection is with the encryption server
+    if (buffer[0] != 'e') {
+        // if not connected to correct server
+        // send 'q' back to server so that it knows to quit processing
+        charsRead = send(socketFD, "q", 1, 0);
+        if (charsRead < 0) error("SERVER: ERROR writing to socket");
+        close(socketFD);
+        perror("CLIENT: tried to connect to wrong server\n");
+        exit(2);
+    }
+
+    // if server is correct, send confirmation back to server
+    charsRead = send(socketFD, "e", 1, 0);
+    sleep(1); // sleep for 1s so that the server only reads the 'e' (and not the message that will be sent as soon as this function ends as well)
 }
