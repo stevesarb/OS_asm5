@@ -1,17 +1,11 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include "functions.h"
 
 void error(const char *msg) { perror(msg); exit(1); } // Error function used for reporting issues
 void push_back(pid_t*, pid_t);
 pid_t* check_children(pid_t*);
 char* get_data(int);
-char* get_data1(int);
-char* append_data(char* wholeMSG, char buffer[]);
+// char* append_data(char* wholeMSG, char buffer[]);
+char* encrypt_msg(char*, char*);
 
 int main(int argc, char *argv[]) {
     int listenSocketFD, establishedConnectionFD, portNumber, charsRead;
@@ -39,6 +33,7 @@ int main(int argc, char *argv[]) {
     char* data = NULL;
     char* msg = NULL;
     char* key = NULL;
+    char* cipherText = NULL;
     pid_t spawnpid = -5;
     pid_t* pid_arr = calloc(5, sizeof(pid_t));
     while (1) {
@@ -58,7 +53,7 @@ int main(int argc, char *argv[]) {
         // child
         else if (spawnpid == 0) {
             // Get the message from the client
-            data = get_data1(establishedConnectionFD);
+            data = get_data(establishedConnectionFD);
             key = strstr(data, "#") + 1;
             *(key - 1) = '\0'; // replace # that separates message and key with null terminator
             msg = data;
@@ -66,16 +61,15 @@ int main(int argc, char *argv[]) {
             
             printf("SERVER: msg received from client: \"%s\"\n", msg);
             printf("SERVER: key received from client: \"%s\"\n", key);
-            // FILE* f = fopen("output.txt", "w");
-            // fprintf(f, "%s", wholeMSG);
-            // fclose(f);
-
-            close(establishedConnectionFD); exit(0);
+            
+            // encrypt message using provided key
+            cipherText = encrypt_msg(msg, key);
 
             // Send a Success message back to the client
-            charsRead = send(establishedConnectionFD, "I am the server, and I got your message", 39, 0); // Send success back 
-            if (charsRead < 0) error("ERROR writing to socket");
+            charsRead = send(establishedConnectionFD, cipherText, strlen(cipherText), 0); // Send encrypted message back
+            if (charsRead < 0) error("SERVER: ERROR writing to socket");
             close(establishedConnectionFD); // Close the existing socket which is connected to the client
+            exit(0);
         }
 
         // parent
@@ -104,6 +98,7 @@ pid_t* check_children(pid_t* pid_arr) {
     int childExitMethod = -5;
     int i = 0;
     pid_t* new_arr = calloc(5, sizeof(pid_t));
+    memset(new_arr, -5, 5);
     while (i < 5) {
         termChild = waitpid(pid_arr[i], &childExitMethod, WNOHANG);
 
@@ -118,7 +113,7 @@ pid_t* check_children(pid_t* pid_arr) {
     return new_arr;
 }
 
-char* get_data1(int establishedConnectionFD) {
+char* get_data(int establishedConnectionFD) {
     char* data = NULL;
     char* hashtag = NULL;
     char buffer[256];
@@ -149,26 +144,59 @@ char* get_data1(int establishedConnectionFD) {
     return data; 
 }
 
-char* append_data(char* wholeMSG, char buffer[]) {
-    char* temp = NULL;
-    if (wholeMSG != NULL) {
-        // printf("WHOLEMSG != NULL\n");
-        temp = calloc(strlen(wholeMSG) + strlen(buffer) + 1, sizeof(char));
-        memset(temp, '\0', strlen(wholeMSG) + strlen(buffer) + 1);
-        strcat(temp, wholeMSG);
-        // printf("ABOUT TO FREE!\n");
-        free(wholeMSG);
-    }
-    else {
-        // printf("WHOLEMSG == NULL\n");
-        temp = calloc(strlen(buffer) + 1, sizeof(char));
-        memset(temp, '\0', strlen(buffer) + 1);
+// char* append_data(char* wholeMSG, char buffer[]) {
+//     char* temp = NULL;
+//     if (wholeMSG != NULL) {
+//         // printf("WHOLEMSG != NULL\n");
+//         temp = calloc(strlen(wholeMSG) + strlen(buffer) + 1, sizeof(char));
+//         memset(temp, '\0', strlen(wholeMSG) + strlen(buffer) + 1);
+//         strcat(temp, wholeMSG);
+//         // printf("ABOUT TO FREE!\n");
+//         free(wholeMSG);
+//     }
+//     else {
+//         // printf("WHOLEMSG == NULL\n");
+//         temp = calloc(strlen(buffer) + 1, sizeof(char));
+//         memset(temp, '\0', strlen(buffer) + 1);
+//     }
+
+//     // printf("ABOUT TO STRCAT(temp, buffer)!\n");
+//     strcat(temp, buffer);
+//     wholeMSG = temp;
+//     temp = NULL;
+
+//     return wholeMSG;
+// }
+
+char* encrypt_msg(char* msg, char* key) {
+    if (strlen(key) < strlen(msg)) error("SERVER: key is too short!\n");
+
+    char* cipherText = calloc(strlen(msg) + 2, sizeof(char));
+    memset(cipherText, '\0', strlen(msg) + 2);
+
+    int i = 0, msgCharVal, keyCharVal;
+    while (i < strlen(msg)) { // loop through msg string
+        if (msg[i] == ' ')
+            msgCharVal = msg[i] - 6; // treat spaces as a 27th character (numeric value of 26)
+        else
+            msgCharVal = msg[i] - 65; // assign all other characters a numeric value 0(A)-25(Z)
+
+        // repeat for key
+        if (key[i] == ' ')
+            keyCharVal = key[i] - 6;
+        else
+            keyCharVal = key[i] - 65;
+        
+        cipherText[i] = ((msgCharVal + keyCharVal) % 27) + 65; // encryption
+
+        // encryption doesn't handle spaces properly, so we must assign them manually
+        if (cipherText[i] == '[')
+            cipherText[i] = ' ';
+
+        ++i;
     }
 
-    // printf("ABOUT TO STRCAT(temp, buffer)!\n");
-    strcat(temp, buffer);
-    wholeMSG = temp;
-    temp = NULL;
+    cipherText[i] = '!'; // add control code to end of string
 
-    return wholeMSG;
+    return cipherText;
 }

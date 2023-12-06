@@ -1,15 +1,10 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include "functions.h"
 
 void error(const char *msg) { perror(msg); exit(0); } // Error function used for reporting issues
 int check_file(FILE*, char**);
+char* get_data(int);
 
 int main(int argc, char *argv[])
 {
@@ -17,6 +12,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in serverAddress;
     struct hostent* serverHostInfo;
     char buffer[256];
+    char* cipherText = NULL;
 
     if (argc < 4) { fprintf(stderr,"USAGE: %s hostname port\n", argv[0]); exit(0); } // Check usage & args
 
@@ -65,13 +61,14 @@ int main(int argc, char *argv[])
     if (charsWritten < 0) error("CLIENT: ERROR writing to socket");
     if (charsWritten < strlen(key)) printf("CLIENT: WARNING: Not all data written to socket!\n");
     
-    exit(0);
+    
 
     // Get return message from server
-    memset(buffer, '\0', sizeof(buffer)); // Clear out the buffer again for reuse
-    charsRead = recv(socketFD, buffer, sizeof(buffer) - 1, 0); // Read data from the socket, leaving \0 at end
-    if (charsRead < 0) error("CLIENT: ERROR reading from socket");
-    printf("CLIENT: I received this from the server: \"%s\"\n", buffer);
+    cipherText = get_data(socketFD);
+    // memset(buffer, '\0', sizeof(buffer)); // Clear out the buffer again for reuse
+    // charsRead = recv(socketFD, buffer, sizeof(buffer) - 1, 0); // Read data from the socket, leaving \0 at end
+    // if (charsRead < 0) error("CLIENT: ERROR reading from socket");
+    printf("CLIENT: I received this from the server: \"%s\"\n", cipherText);
     
     close(socketFD); // Close the socket
     return 0;
@@ -110,4 +107,24 @@ int check_file(FILE* file, char** textPtr) {
     *textPtr = textWithCC;
 
     return 0;
+}
+
+char* get_data(int socketFD) {
+    char* data = NULL;
+    char buffer[256];
+    int charsRead;
+
+    do {
+        memset(buffer, '\0', 256);
+        charsRead = recv(socketFD, buffer, 255, 0); // read server's response
+        if (charsRead < 0) error("CLIENT: ERROR reading from socket\n");
+
+        // add buffer to data
+        data = append_data(data, buffer);
+
+    } while (strstr(data, "!") == NULL);
+
+    data[strlen(data) - 1] = '\0'; // replace CC with terminator
+
+    return data;
 }
