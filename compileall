@@ -1,0 +1,6 @@
+#/!bin/bash
+gcc code/keygen.c -o keygen -std=c99
+gcc code/enc_server.c -o enc_server
+gcc code/enc_client.c -o enc_client
+gcc code/dec_server.c -o dec_server
+gcc code/dec_client.c -o dec_client
