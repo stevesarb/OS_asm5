@@ -1,3 +1,5 @@
+#ifndef CLIENT_H
+#define CLIENT_H
 
 int check_file(FILE* file, char** textPtr) {
     size_t len;
@@ -74,7 +76,10 @@ void check_server(int socketFD, char code) {
         charsRead = send(socketFD, "q", 1, 0);
         if (charsRead < 0) error("SERVER: ERROR writing to socket");
         close(socketFD);
-        perror("CLIENT: tried to connect to wrong server\n");
+        if (code == 'e')
+            perror("enc_client: cannot use dec_server\n");
+        if (code == 'd')
+            perror("dec_client: cannot use enc_server\n");
         exit(2);
     }
 
@@ -82,3 +87,5 @@ void check_server(int socketFD, char code) {
     charsRead = send(socketFD, &code, 1, 0);
     sleep(1); // sleep for 1s so that the server only reads the 'e' (and not the message that will be sent as soon as this function ends as well)
 }
+
+#endif

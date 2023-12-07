@@ -16,21 +16,21 @@ int main(int argc, char *argv[])
     // check text and key files for any bad character and for valid lengths
     char* key = NULL;
     FILE* keyFile = fopen(argv[2], "r"); // open file
-    if (keyFile == NULL) error("Couldn't open key file\n"); 
+    if (keyFile == NULL) error("enc_client: Couldn't open key file\n");
     int keyValid = check_file(keyFile, &key); fclose(keyFile);
     // printf("key: %s\tkeyValid: %d\n", key, keyValid);
 
     char* msg = NULL;
     FILE* msgFile = fopen(argv[1], "r");
-    if (msgFile == NULL) error("Couldn't open msg file\n"); //{perror("Couldn't open msg file\n"); exit(1);}
+    if (msgFile == NULL) error("enc_client: Couldn't open msg file\n"); //{perror("Couldn't open msg file\n"); exit(1);}
     int msgValid = check_file(msgFile, &msg); fclose(msgFile);
     // printf("msg: %s\tmsgValid: %d\n", msg, msgValid); exit(0);
 
-    if (msgValid < 0) error("Message had invalid characters!\n");
-    if (keyValid < 0) error("Key had invalid characters!\n"); 
-    if (strlen(key) < strlen(msg)) error("Key is shorter than the message!\n");
+    if (msgValid < 0) fprintf(stderr, "enc_client: %s has invalid characters\n", argv[1]);
+    if (keyValid < 0) fprintf(stderr, "enc_client: %s has invalid characters\n", argv[2]);
+    if (strlen(key) < strlen(msg)) error("enc_client: Key is shorter than the message!\n");
 
-    
+
     // Set up the server address struct
     memset((char*)&serverAddress, '\0', sizeof(serverAddress)); // Clear out the address struct
     portNumber = atoi(argv[3]); // Get the port number, convert to an integer from a string

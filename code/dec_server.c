@@ -2,7 +2,7 @@
 #include "server.h"
 
 char* decrypt_msg(char* msg, char* key) {
-    if (strlen(key) < strlen(msg)) error("SERVER: key is too short!\n");
+    if (strlen(key) < strlen(msg)) perror("DEC_SERVER: key is too short!\n");
 
     char* plainText = calloc(strlen(msg) + 2, sizeof(char));
     memset(plainText, '\0', strlen(msg) + 2);
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 
             // Send a Success message back to the client
             charsRead = send(establishedConnectionFD, plainText, strlen(plainText), 0); // Send encrypted message back
-            if (charsRead < 0) error("SERVER: ERROR writing to socket");
+            if (charsRead < 0) perror("SERVER: ERROR writing to socket");
             close(establishedConnectionFD); // Close the existing socket which is connected to the client
             exit(0);
         }

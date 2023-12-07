@@ -22,13 +22,13 @@ int main(int argc, char *argv[])
 
     char* msg = NULL;
     FILE* msgFile = fopen(argv[1], "r");
-    if (msgFile == NULL) error("Couldn't open msg file\n"); //{perror("Couldn't open msg file\n"); exit(1);}
+    if (msgFile == NULL) error("dec_client: couldn't open msg file\n"); //{perror("Couldn't open msg file\n"); exit(1);}
     int msgValid = check_file(msgFile, &msg); fclose(msgFile);
     // printf("msg: %s\tmsgValid: %d\n", msg, msgValid); exit(0);
 
-    if (msgValid < 0) error("Message had invalid characters!\n");
-    if (keyValid < 0) error("Key had invalid characters!\n"); 
-    if (strlen(key) < strlen(msg)) error("Key is shorter than the message!\n");
+    if (msgValid < 0) fprintf(stderr, "enc_client: %s has invalid characters\n", argv[1]);
+    if (keyValid < 0) fprintf(stderr, "enc_client: %s has invalid characters\n", argv[2]);
+    if (strlen(key) < strlen(msg)) error("dec_client: key is shorter than the message!\n");
 
     
     // Set up the server address struct
@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
     
     // Connect to server
     if (connect(socketFD, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) // Connect socket to addy
-        error("CLIENT: ERROR connecting");
+        { perror("CLIENT: ERROR connecting"); exit(2);}
 
     
     // check that the client is connected to the decryption server
